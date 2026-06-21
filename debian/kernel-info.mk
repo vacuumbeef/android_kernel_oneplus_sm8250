@@ -18,7 +18,7 @@ KERNEL_BOOTIMAGE_CMDLINE = androidboot.hardware=qcom androidboot.console=ttyMSM0
 DEVICE_VENDOR = oneplus
 
 # Slug for the device model. Like above.
-DEVICE_MODEL = oneplus8
+DEVICE_MODEL = instantnoodle
 
 # Slug for the device platform. If unsure, keep this commented.
 # DEVICE_PLATFORM = platform
@@ -216,3 +216,5 @@ KERNEL_ARCH = arm64
 
 # Kernel target to build
 KERNEL_BUILD_TARGET = Image.gz
+
+CLANG_VERSION = 10.0-r370808
