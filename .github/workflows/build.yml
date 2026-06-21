@@ -1,0 +1,77 @@
+name: Build Droidian kernel and release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package bring-up part from the guide
+        run: |
+          PACKAGES_DIR="$HOME/droidian/packages"
+          KERNEL_DIR="$HOME/droidian/kernel/oneplus/instantnoodle"
+
+          mkdir -p "$PACKAGES_DIR"
+          mkdir -p "$(dirname "$KERNEL_DIR")"
+
+          cp -R "${{ github.workspace }}" "$KERNEL_DIR"
+
+          echo "PACKAGES_DIR=$PACKAGES_DIR" >> $GITHUB_ENV
+          echo "KERNEL_DIR=$KERNEL_DIR" >> $GITHUB_ENV
+
+      - name: Compile and package the kernel
+        run: |
+          docker run --rm \
+            -v ${{ env.PACKAGES_DIR }}:/buildd \
+            -v ${{ env.KERNEL_DIR }}:/buildd/sources \
+            quay.io/droidian/build-essential:current-amd64 \
+            bash -c "
+              apt-get update && apt-get install -y linux-packaging-snippets && \
+              cd /buildd/sources && \
+
+              rm -f debian/compat && \
+
+              rm -f debian/control && \
+              debian/rules debian/control && \
+
+              RELENG_HOST_ARCH='arm64' releng-build-package
+            "
+          sudo chown -R $USER:$USER ${{ env.PACKAGES_DIR }} ${{ env.KERNEL_DIR }}/out || true
+
+      - name: Push packages to apt repo
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git clone https://x-access-token:${{ secrets.APT_REPO_PAT }}@github.com/${{ github.repository_owner }}/droidian-instantnoodle-apt-repo.git
+
+          mkdir -p droidian-instantnoodle-apt-repo/packages
+          cp -v ${{ env.PACKAGES_DIR }}/*.deb droidian-instantnoodle-apt-repo/packages/
+
+          cd droidian-instantnoodle-apt-repo
+          git add packages/*.deb
+          git commit -m "Upload kernel packages" || exit 0
+          git push
+
+      - name: Delete latest release
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "latest"
+          name: "Droidian instantnoodle kernel"
+          body: "latest build"
+          files: |
+            ${{ env.PACKAGES_DIR }}/*.deb
+            ${{ env.KERNEL_DIR }}/out/KERNEL_OBJ/boot.img
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
